@@ -239,15 +239,15 @@
     position: absolute;
     top: 0; left: 0; bottom: 0;
     border-radius: 14px;
-    min-width: 45%;
+    min-width: 0;
     max-width: 100%;
     transition: width 1s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  .bar-fill.days { background: var(--bar-days); box-shadow: 0 4px 20px var(--glow-green); }
-  .bar-fill.hours { background: var(--bar-hours); box-shadow: 0 4px 20px var(--glow-blue); }
-  .bar-fill.minutes { background: var(--bar-minutes); box-shadow: 0 4px 20px var(--glow-cyan); }
-  .bar-fill.seconds { background: var(--bar-seconds); box-shadow: 0 4px 20px var(--glow-purple); }
+  .bar-fill.bar-0 { background: var(--bar-days); box-shadow: 0 4px 20px var(--glow-green); }
+  .bar-fill.bar-1 { background: var(--bar-hours); box-shadow: 0 4px 20px var(--glow-blue); }
+  .bar-fill.bar-2 { background: var(--bar-minutes); box-shadow: 0 4px 20px var(--glow-cyan); }
+  .bar-fill.bar-3 { background: var(--bar-seconds); box-shadow: 0 4px 20px var(--glow-purple); }
 
   .bar-content {
     position: relative;
@@ -429,40 +429,7 @@
 
   <div class="tagline">It's been</div>
 
-  <div class="bars-container">
-    <div class="bar-row" style="animation-delay: 0s">
-      <div class="bar-bg"></div>
-      <div class="bar-fill days" id="barDays" style="width:45%"></div>
-      <div class="bar-content">
-        <span class="bar-value" id="valDays">0</span>
-        <span class="bar-label">days</span>
-      </div>
-    </div>
-    <div class="bar-row" style="animation-delay: 0.08s">
-      <div class="bar-bg"></div>
-      <div class="bar-fill hours" id="barHours" style="width:45%"></div>
-      <div class="bar-content">
-        <span class="bar-value" id="valHours">0</span>
-        <span class="bar-label">hours</span>
-      </div>
-    </div>
-    <div class="bar-row" style="animation-delay: 0.16s">
-      <div class="bar-bg"></div>
-      <div class="bar-fill minutes" id="barMinutes" style="width:45%"></div>
-      <div class="bar-content">
-        <span class="bar-value" id="valMinutes">0</span>
-        <span class="bar-label">minutes</span>
-      </div>
-    </div>
-    <div class="bar-row" style="animation-delay: 0.24s">
-      <div class="bar-bg"></div>
-      <div class="bar-fill seconds" id="barSeconds" style="width:45%"></div>
-      <div class="bar-content">
-        <span class="bar-value" id="valSeconds">0</span>
-        <span class="bar-label">seconds</span>
-      </div>
-    </div>
-  </div>
+  <div class="bars-container" id="barsContainer"></div>
 
 
 
@@ -576,17 +543,12 @@ function showTracker() {
   overlay.classList.add('hidden');
   mainApp.classList.remove('hidden');
   mainApp.style.opacity = '0';
+  lastTier = '';
   requestAnimationFrame(() => {
     mainApp.style.animation = 'none';
     mainApp.offsetHeight; // reflow
     mainApp.style.animation = '';
     mainApp.style.opacity = '';
-  });
-
-  // Trigger bar animations
-  document.querySelectorAll('.bar-row').forEach((bar, i) => {
-    bar.classList.remove('animate');
-    setTimeout(() => bar.classList.add('animate'), i * 80);
   });
 
   tick();
@@ -595,41 +557,104 @@ function showTracker() {
 }
 
 // ── Tick ──
+function getUnits(totalSeconds) {
+  const sec = totalSeconds % 60;
+  const totalMin = Math.floor(totalSeconds / 60);
+  const min = totalMin % 60;
+  const totalHr = Math.floor(totalMin / 60);
+  const hr = totalHr % 24;
+  const totalDays = Math.floor(totalHr / 24);
+  const weeks = Math.floor(totalDays / 7);
+  const daysAfterWeeks = totalDays % 7;
+  const months = Math.floor(totalDays / 30.44); // avg days/month
+  const daysAfterMonths = totalDays - Math.floor(months * 30.44);
+  const weeksAfterMonths = Math.floor(daysAfterMonths / 7);
+  const daysAfterMonthsWeeks = daysAfterMonths % 7;
+  const years = Math.floor(totalDays / 365.25);
+  const daysAfterYears = totalDays - Math.floor(years * 365.25);
+  const monthsAfterYears = Math.floor(daysAfterYears / 30.44);
+  const daysRem = daysAfterYears - Math.floor(monthsAfterYears * 30.44);
+  const weeksRem = Math.floor(daysRem / 7);
+
+  // value, label, max (for bar %)
+  if (totalDays >= 365) {
+    return [
+      { val: years,            label: years === 1 ? 'year' : 'years',     max: 10 },
+      { val: monthsAfterYears, label: monthsAfterYears === 1 ? 'month' : 'months', max: 12 },
+      { val: weeksRem,         label: weeksRem === 1 ? 'week' : 'weeks',  max: 4 },
+      { val: Math.floor(daysRem % 7), label: Math.floor(daysRem % 7) === 1 ? 'day' : 'days', max: 7 },
+    ];
+  }
+  if (totalDays >= 30) {
+    return [
+      { val: months,             label: months === 1 ? 'month' : 'months',             max: 12 },
+      { val: weeksAfterMonths,   label: weeksAfterMonths === 1 ? 'week' : 'weeks',     max: 4 },
+      { val: daysAfterMonthsWeeks, label: daysAfterMonthsWeeks === 1 ? 'day' : 'days', max: 7 },
+      { val: hr,                 label: hr === 1 ? 'hour' : 'hours',                   max: 24 },
+    ];
+  }
+  if (totalDays >= 7) {
+    return [
+      { val: weeks,          label: weeks === 1 ? 'week' : 'weeks', max: 4 },
+      { val: daysAfterWeeks, label: daysAfterWeeks === 1 ? 'day' : 'days', max: 7 },
+      { val: hr,             label: hr === 1 ? 'hour' : 'hours',    max: 24 },
+      { val: min,            label: min === 1 ? 'minute' : 'minutes', max: 60 },
+    ];
+  }
+  return [
+    { val: totalDays, label: totalDays === 1 ? 'day' : 'days', max: 7 },
+    { val: hr,        label: hr === 1 ? 'hour' : 'hours',      max: 24 },
+    { val: min,       label: min === 1 ? 'minute' : 'minutes',  max: 60 },
+    { val: sec,       label: sec === 1 ? 'second' : 'seconds',  max: 60 },
+  ];
+}
+
+let lastTier = '';
+
+function renderBars(units) {
+  const tierKey = units.map(u => u.label).join(',');
+  const container = $('barsContainer');
+
+  if (tierKey !== lastTier) {
+    // Rebuild bar DOM when units change tiers
+    lastTier = tierKey;
+    container.innerHTML = units.map((u, i) => `
+      <div class="bar-row" style="animation-delay: ${i * 0.08}s">
+        <div class="bar-bg"></div>
+        <div class="bar-fill bar-${i}" id="bar${i}" style="width:0%"></div>
+        <div class="bar-content">
+          <span class="bar-value" id="val${i}">${u.val}</span>
+          <span class="bar-label" id="lbl${i}">${u.label}</span>
+        </div>
+      </div>
+    `).join('');
+
+    // Trigger animations
+    container.querySelectorAll('.bar-row').forEach((bar, i) => {
+      setTimeout(() => bar.classList.add('animate'), i * 80);
+    });
+  }
+
+  // Update values and widths
+  units.forEach((u, i) => {
+    $('val' + i).textContent = u.val;
+    $('lbl' + i).textContent = u.label;
+    const pct = Math.round((u.val / u.max) * 100);
+    $('bar' + i).style.width = Math.min(pct, 100) + '%';
+  });
+}
+
 function tick() {
   const now = new Date();
   const diff = now - startDate;
-  if (diff < 0) {
-    $('valDays').textContent = '0';
-    $('valHours').textContent = '0';
-    $('valMinutes').textContent = '0';
-    $('valSeconds').textContent = '0';
-    return;
-  }
+  if (diff < 0) return;
 
   const totalSeconds = Math.floor(diff / 1000);
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor((totalSeconds % 86400) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
+  const totalDays = Math.floor(totalSeconds / 86400);
+  const units = getUnits(totalSeconds);
 
-  $('valDays').textContent = days;
-  $('valHours').textContent = hours;
-  $('valMinutes').textContent = minutes;
-  $('valSeconds').textContent = seconds;
-
-  // Bar widths (proportional feel)
-  const dayWidth = Math.min(45 + (days / 365) * 55, 100);
-  const hourWidth = 45 + (hours / 24) * 55;
-  const minWidth = 45 + (minutes / 60) * 55;
-  const secWidth = 45 + (seconds / 60) * 55;
-
-  $('barDays').style.width = dayWidth + '%';
-  $('barHours').style.width = hourWidth + '%';
-  $('barMinutes').style.width = minWidth + '%';
-  $('barSeconds').style.width = secWidth + '%';
-
-  // Milestones
-  updateMilestones(days);
+  renderBars(units);
+  updateMilestones(totalDays);
 }
 
 function updateMilestones(days) {
