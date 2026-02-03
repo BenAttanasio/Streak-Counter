@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg-deep: #0f1923;
+    --bg-mid: #162533;
+    --bg-card: rgba(255,255,255,0.04);
+    --text-primary: #e8edf2;
+    --text-secondary: rgba(200,215,230,0.55);
+    --bar-days: linear-gradient(135deg, #00c9a7 0%, #00d4aa 40%, #3be8b0 100%);
+    --bar-hours: linear-gradient(135deg, #00b4d8 0%, #48cae4 50%, #5ed8ed 100%);
+    --bar-minutes: linear-gradient(135deg, #4cc9f0 0%, #72d8f5 40%, #80e0c0 100%);
+    --bar-seconds: linear-gradient(135deg, #7b68ee 0%, #9b8afb 50%, #b8a9fc 100%);
+    --glow-green: rgba(0, 201, 167, 0.15);
+    --glow-blue: rgba(0, 180, 216, 0.15);
+    --glow-cyan: rgba(76, 201, 240, 0.15);
+    --glow-purple: rgba(123, 104, 238, 0.15);
+  }
+
+  html, body {
+    height: 100%;
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100dvh;
+    background:
+      radial-gradient(ellipse 80% 50% at 50% 0%, rgba(0,201,167,0.07) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 80% 80%, rgba(123,104,238,0.05) 0%, transparent 50%),
+      linear-gradient(180deg, #0f1923 0%, #121e2b 50%, #0d1620 100%);
+  }
+
+  /* ── Setup overlay ── */
+  .setup-overlay {
+    position: fixed; inset: 0;
+    z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(10, 18, 26, 0.92);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    opacity: 0;
+    animation: fadeIn 0.4s ease forwards;
+  }
+
+  .setup-overlay.hidden {
+    animation: fadeOut 0.3s ease forwards;
+    pointer-events: none;
+  }
+
+  .setup-card {
+    background: linear-gradient(145deg, rgba(30,45,62,0.95), rgba(20,32,48,0.98));
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 24px;
+    padding: 40px 36px;
+    max-width: 380px;
+    width: 90%;
+    text-align: center;
+    box-shadow:
+      0 24px 80px rgba(0,0,0,0.4),
+      0 0 0 1px rgba(255,255,255,0.03) inset;
+    transform: translateY(20px);
+    animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards;
+    opacity: 0;
+  }
+
+  .setup-card h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    letter-spacing: -0.02em;
+  }
+
+  .setup-card p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 28px;
+    line-height: 1.5;
+  }
+
+  .date-input-wrapper {
+    position: relative;
+    margin-bottom: 24px;
+  }
+
+  .date-input-wrapper input {
+    width: 100%;
+    padding: 16px 20px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(0,0,0,0.25);
+    color: var(--text-primary);
+    font-family: 'Space Mono', monospace;
+    font-size: 1.1rem;
+    text-align: center;
+    letter-spacing: 0.05em;
+    outline: none;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+
+  .date-input-wrapper input:focus {
+    border-color: rgba(0,201,167,0.4);
+    box-shadow: 0 0 0 4px rgba(0,201,167,0.08);
+  }
+
+  .btn-start {
+    width: 100%;
+    padding: 16px;
+    border-radius: 14px;
+    border: none;
+    background: linear-gradient(135deg, #00c9a7, #00b4d8);
+    color: #fff;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.3s;
+    box-shadow: 0 4px 20px rgba(0,201,167,0.25);
+  }
+
+  .btn-start:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 28px rgba(0,201,167,0.35);
+  }
+
+  .btn-start:active { transform: translateY(0); }
+
+  .btn-start:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  /* ── Main tracker ── */
+  .app {
+    width: 100%;
+    max-width: 480px;
+    padding: 0 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    opacity: 0;
+    animation: fadeIn 0.6s ease 0.2s forwards;
+  }
+
+  .app.hidden { display: none; }
+
+  /* Header */
+  .header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 0 8px;
+  }
+
+  .header-title {
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-secondary);
+  }
+
+  .btn-edit {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    padding: 8px 14px;
+    color: var(--text-secondary);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-edit:hover {
+    background: rgba(255,255,255,0.1);
+    color: var(--text-primary);
+  }
+
+  /* Tagline */
+  .tagline {
+    margin-top: 40px;
+    margin-bottom: 36px;
+    text-align: center;
+    font-size: 1.05rem;
+    color: var(--text-secondary);
+    font-weight: 400;
+    letter-spacing: 0.01em;
+  }
+
+  /* Bars */
+  .bars-container {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .bar-row {
+    position: relative;
+    width: 100%;
+    height: 62px;
+    border-radius: 14px;
+    overflow: hidden;
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+
+  .bar-row.animate {
+    animation: barSlideIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  .bar-bg {
+    position: absolute; inset: 0;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 14px;
+  }
+
+  .bar-fill {
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    border-radius: 14px;
+    min-width: 45%;
+    max-width: 100%;
+    transition: width 1s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .bar-fill.days { background: var(--bar-days); box-shadow: 0 4px 20px var(--glow-green); }
+  .bar-fill.hours { background: var(--bar-hours); box-shadow: 0 4px 20px var(--glow-blue); }
+  .bar-fill.minutes { background: var(--bar-minutes); box-shadow: 0 4px 20px var(--glow-cyan); }
+  .bar-fill.seconds { background: var(--bar-seconds); box-shadow: 0 4px 20px var(--glow-purple); }
+
+  .bar-content {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    height: 100%;
+    padding: 0 22px;
+    gap: 10px;
+  }
+
+  .bar-value {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.65rem;
+    font-weight: 700;
+    line-height: 1;
+    min-width: 56px;
+    color: #fff;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  }
+
+  .bar-label {
+    font-size: 1.05rem;
+    font-weight: 500;
+    color: rgba(255,255,255,0.85);
+    letter-spacing: 0.02em;
+  }
+
+
+
+  /* Milestone */
+  .milestone-section {
+    width: 100%;
+    margin-top: 48px;
+    padding-bottom: 48px;
+  }
+
+  .milestone-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 16px;
+    letter-spacing: -0.02em;
+  }
+
+  .milestone-card {
+    background: var(--bg-card);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+
+  .milestone-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 20px;
+  }
+
+  .milestone-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .milestone-icon {
+    width: 40px; height: 40px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(0,201,167,0.15), rgba(0,180,216,0.15));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.1rem;
+  }
+
+  .milestone-info strong {
+    display: block;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  .milestone-info span {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+  }
+
+  .milestone-arrow {
+    color: var(--text-secondary);
+    font-size: 1.2rem;
+  }
+
+  .milestone-bottom {
+    border-top: 1px solid rgba(255,255,255,0.04);
+    padding: 14px 20px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+  }
+
+  /* Next milestone progress */
+  .next-milestone {
+    margin-top: 16px;
+  }
+
+  .next-label {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .progress-track {
+    width: 100%;
+    height: 6px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #00c9a7, #00b4d8);
+    transition: width 1s ease;
+    box-shadow: 0 0 10px rgba(0,201,167,0.3);
+  }
+
+
+
+  /* ── Animations ── */
+  @keyframes fadeIn {
+    from { opacity: 0; } to { opacity: 1; }
+  }
+
+  @keyframes fadeOut {
+    from { opacity: 1; } to { opacity: 0; }
+  }
+
+  @keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  @keyframes barSlideIn {
+    from { transform: translateX(-30px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+
+  /* Responsiveness */
+  @media (max-width: 360px) {
+    .bar-value { font-size: 1.4rem; }
+    .bar-row { height: 56px; }
+  }
+
+  @media (min-width: 600px) {
+    .bars-container { gap: 16px; }
+    .bar-row { height: 68px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Setup Overlay -->
+<div class="setup-overlay" id="setupOverlay">
+  <div class="setup-card">
+    <h2>Set Your Date</h2>
+    <p>Pick your start date. It's stored in the URL — bookmark it to keep it forever.</p>
+    <div class="date-input-wrapper">
+      <input type="date" id="dateInput">
+    </div>
+    <button class="btn-start" id="btnStart" disabled>Start Tracking</button>
+  </div>
+</div>
+
+<!-- Main App -->
+<div class="app hidden" id="mainApp">
+  <div class="header">
+    <span class="header-title">Summary</span>
+    <button class="btn-edit" id="btnEdit">Edit Date</button>
+  </div>
+
+  <div class="tagline">It's been</div>
+
+  <div class="bars-container">
+    <div class="bar-row" style="animation-delay: 0s">
+      <div class="bar-bg"></div>
+      <div class="bar-fill days" id="barDays" style="width:45%"></div>
+      <div class="bar-content">
+        <span class="bar-value" id="valDays">0</span>
+        <span class="bar-label">days</span>
+      </div>
+    </div>
+    <div class="bar-row" style="animation-delay: 0.08s">
+      <div class="bar-bg"></div>
+      <div class="bar-fill hours" id="barHours" style="width:45%"></div>
+      <div class="bar-content">
+        <span class="bar-value" id="valHours">0</span>
+        <span class="bar-label">hours</span>
+      </div>
+    </div>
+    <div class="bar-row" style="animation-delay: 0.16s">
+      <div class="bar-bg"></div>
+      <div class="bar-fill minutes" id="barMinutes" style="width:45%"></div>
+      <div class="bar-content">
+        <span class="bar-value" id="valMinutes">0</span>
+        <span class="bar-label">minutes</span>
+      </div>
+    </div>
+    <div class="bar-row" style="animation-delay: 0.24s">
+      <div class="bar-bg"></div>
+      <div class="bar-fill seconds" id="barSeconds" style="width:45%"></div>
+      <div class="bar-content">
+        <span class="bar-value" id="valSeconds">0</span>
+        <span class="bar-label">seconds</span>
+      </div>
+    </div>
+  </div>
+
+
+
+  <div class="milestone-section">
+    <div class="milestone-title">Last milestone</div>
+    <div class="milestone-card">
+      <div class="milestone-top">
+        <div class="milestone-left">
+          <div class="milestone-icon">💎</div>
+          <div class="milestone-info">
+            <strong id="milestoneLabel">—</strong>
+            <span id="milestoneSub"></span>
+          </div>
+        </div>
+        <div class="milestone-arrow">›</div>
+      </div>
+      <div class="milestone-bottom" id="milestoneDate">—</div>
+    </div>
+
+    <div class="next-milestone">
+      <div class="next-label">
+        <span>Next milestone</span>
+        <span id="nextMilestoneLabel">—</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+<script>
+const MILESTONES = [
+  { days: 1, label: '1 Day', icon: '🌱' },
+  { days: 3, label: '3 Days', icon: '🌿' },
+  { days: 7, label: '1 Week', icon: '⭐' },
+  { days: 14, label: '2 Weeks', icon: '🔥' },
+  { days: 21, label: '3 Weeks', icon: '💎' },
+  { days: 30, label: '1 Month', icon: '🏆' },
+  { days: 60, label: '2 Months', icon: '🚀' },
+  { days: 90, label: '3 Months', icon: '👑' },
+  { days: 180, label: '6 Months', icon: '🌟' },
+  { days: 365, label: '1 Year', icon: '🎯' },
+  { days: 730, label: '2 Years', icon: '💫' },
+  { days: 1095, label: '3 Years', icon: '🏅' },
+  { days: 1825, label: '5 Years', icon: '🏛️' },
+];
+
+const $ = id => document.getElementById(id);
+const overlay = $('setupOverlay');
+const mainApp = $('mainApp');
+const dateInput = $('dateInput');
+const btnStart = $('btnStart');
+const btnEdit = $('btnEdit');
+
+let startDate = null;
+let interval = null;
+
+const pad = n => String(n).padStart(2, '0');
+
+// Always parse YYYY-MM-DD as local midnight
+function parseLocal(str) {
+  const m = str.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const d = new Date(+m[1], +m[2]-1, +m[3]);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function toDateString(date) {
+  return date.getFullYear() + '-' + pad(date.getMonth()+1) + '-' + pad(date.getDate());
+}
+
+// ── Read start date from URL hash ──
+function readHash() {
+  const hash = location.hash.slice(1);
+  if (!hash) return null;
+  return parseLocal(decodeURIComponent(hash));
+}
+
+function writeHash(date) {
+  history.replaceState(null, '', '#' + toDateString(date));
+}
+
+// ── Date input ──
+dateInput.addEventListener('input', () => {
+  btnStart.disabled = !dateInput.value;
+});
+
+btnStart.addEventListener('click', () => {
+  if (!dateInput.value) return;
+  startDate = parseLocal(dateInput.value);
+  if (!startDate) return;
+  writeHash(startDate);
+  showTracker();
+});
+
+btnEdit.addEventListener('click', () => {
+  clearInterval(interval);
+  mainApp.classList.add('hidden');
+  overlay.classList.remove('hidden');
+  if (startDate) {
+    dateInput.value = toDateString(startDate);
+    btnStart.disabled = false;
+  }
+});
+
+// ── Show tracker ──
+function showTracker() {
+  overlay.classList.add('hidden');
+  mainApp.classList.remove('hidden');
+  mainApp.style.opacity = '0';
+  requestAnimationFrame(() => {
+    mainApp.style.animation = 'none';
+    mainApp.offsetHeight; // reflow
+    mainApp.style.animation = '';
+    mainApp.style.opacity = '';
+  });
+
+  // Trigger bar animations
+  document.querySelectorAll('.bar-row').forEach((bar, i) => {
+    bar.classList.remove('animate');
+    setTimeout(() => bar.classList.add('animate'), i * 80);
+  });
+
+  tick();
+  clearInterval(interval);
+  interval = setInterval(tick, 1000);
+}
+
+// ── Tick ──
+function tick() {
+  const now = new Date();
+  const diff = now - startDate;
+  if (diff < 0) {
+    $('valDays').textContent = '0';
+    $('valHours').textContent = '0';
+    $('valMinutes').textContent = '0';
+    $('valSeconds').textContent = '0';
+    return;
+  }
+
+  const totalSeconds = Math.floor(diff / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  $('valDays').textContent = days;
+  $('valHours').textContent = hours;
+  $('valMinutes').textContent = minutes;
+  $('valSeconds').textContent = seconds;
+
+  // Bar widths (proportional feel)
+  const dayWidth = Math.min(45 + (days / 365) * 55, 100);
+  const hourWidth = 45 + (hours / 24) * 55;
+  const minWidth = 45 + (minutes / 60) * 55;
+  const secWidth = 45 + (seconds / 60) * 55;
+
+  $('barDays').style.width = dayWidth + '%';
+  $('barHours').style.width = hourWidth + '%';
+  $('barMinutes').style.width = minWidth + '%';
+  $('barSeconds').style.width = secWidth + '%';
+
+  // Milestones
+  updateMilestones(days);
+}
+
+function updateMilestones(days) {
+  let last = null;
+  let next = null;
+
+  for (let i = 0; i < MILESTONES.length; i++) {
+    if (days >= MILESTONES[i].days) {
+      last = MILESTONES[i];
+    } else {
+      next = MILESTONES[i];
+      break;
+    }
+  }
+
+  const milestoneIcon = document.querySelector('.milestone-icon');
+
+  if (last) {
+    $('milestoneLabel').textContent = last.label;
+    $('milestoneSub').textContent = last.days + ' days';
+    milestoneIcon.textContent = last.icon;
+
+    const reached = new Date(startDate.getTime() + last.days * 86400000);
+    $('milestoneDate').textContent = 'You reached this milestone: ' +
+      reached.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  } else {
+    $('milestoneLabel').textContent = 'Just started';
+    $('milestoneSub').textContent = 'Keep going!';
+    milestoneIcon.textContent = '🌱';
+    $('milestoneDate').textContent = 'Your first milestone is 1 day';
+  }
+
+  if (next) {
+    $('nextMilestoneLabel').textContent = next.label;
+    const prevDays = last ? last.days : 0;
+    const progress = ((days - prevDays) / (next.days - prevDays)) * 100;
+    $('progressFill').style.width = Math.min(progress, 100) + '%';
+  } else {
+    $('nextMilestoneLabel').textContent = '∞';
+    $('progressFill').style.width = '100%';
+  }
+}
+
+// ── Init ──
+(function init() {
+  const saved = readHash();
+  dateInput.max = toDateString(new Date());
+
+  if (saved) {
+    startDate = saved;
+    dateInput.value = toDateString(saved);
+    btnStart.disabled = false;
+    showTracker();
+  }
+})();
+</script>
+</body>
+</html>
